@@ -21,3 +21,16 @@ class Bird:
 
     def rect(self):
         return pygame.Rect(self.x - self.radius, self.y - self.radius, self.radius * 2, self.radius * 2)
+
+    def collides_with_rect(self, rect):
+        """Circle-vs-rectangle collision using the bird's real radius.
+
+        Finds the point on the rectangle closest to the bird's centre and
+        checks whether it lies within `radius`. This catches edge and corner
+        clips that a single centre-point test misses.
+        """
+        closest_x = max(rect.left, min(self.x, rect.right))
+        closest_y = max(rect.top, min(self.y, rect.bottom))
+        dx = self.x - closest_x
+        dy = self.y - closest_y
+        return dx * dx + dy * dy <= self.radius * self.radius
