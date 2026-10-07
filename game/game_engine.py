@@ -6,11 +6,26 @@ from .pipe import Pipe
 
 WHITE = (255, 255, 255)
 GREEN = (0, 150, 0)
-BLACK = (0, 0, 0)
+YELLOW = (255, 220, 0)
 
 # Frames to ignore input after dying, so a frantic last flap
-# doesn't instantly dismiss the Game Over screen.
+# doesn't instantly pick a menu option.
 INPUT_DELAY_FRAMES = 30
+
+# Pixel distance between consecutive pipes is kept the same on every
+# difficulty: spawn interval (frames) = PIPE_SPACING / speed.
+PIPE_SPACING = 360
+
+DIFFICULTIES = {
+    "Easy":   {"speed": 3, "gap": 190},
+    "Medium": {"speed": 4, "gap": 150},
+    "Hard":   {"speed": 6, "gap": 120},
+}
+DIFFICULTY_KEYS = {
+    pygame.K_1: "Easy",
+    pygame.K_2: "Medium",
+    pygame.K_3: "Hard",
+}
 
 
 class GameEngine:
@@ -18,17 +33,30 @@ class GameEngine:
         self.width = width
         self.height = height
 
-        self.bird = Bird(width // 4, height // 2)
-        self.pipe_speed = 4
-        self.pipe_interval = 90  # frames between pipe spawns
-        self._spawn_timer = 0
-        self.pipes = [Pipe(width + 100, height, speed=self.pipe_speed)]
-
-        self.score = 0
         self.font = pygame.font.SysFont("Arial", 30)
         self.big_font = pygame.font.SysFont("Arial", 56, bold=True)
+
+        self.difficulty = "Medium"
+        self.reset(self.difficulty)
+
+    def reset(self, difficulty):
+        """Start a fresh run at the given difficulty."""
+        self.difficulty = difficulty
+        cfg = DIFFICULTIES[difficulty]
+        self.pipe_speed = cfg["speed"]
+        self.pipe_gap = cfg["gap"]
+        self.pipe_interval = PIPE_SPACING // self.pipe_speed  # frames between spawns
+
+        self.bird = Bird(self.width // 4, self.height // 2)
+        self._spawn_timer = 0
+        self.pipes = [self._new_pipe(self.width + 100)]
+
+        self.score = 0
         self.game_over = False
         self.game_over_timer = 0
+
+    def _new_pipe(self, x):
+        return Pipe(x, self.height, gap=self.pipe_gap, speed=self.pipe_speed)
 
     def _end_game(self):
         self.game_over = True
@@ -47,7 +75,11 @@ class GameEngine:
     def _handle_game_over_event(self, event):
         if self.game_over_timer < INPUT_DELAY_FRAMES:
             return
-        if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
+        if event.type != pygame.KEYDOWN:
+            return
+        if event.key in DIFFICULTY_KEYS:
+            self.reset(DIFFICULTY_KEYS[event.key])
+        elif event.key in (pygame.K_q, pygame.K_ESCAPE):
             # Ask main loop to exit cleanly.
             pygame.event.post(pygame.event.Event(pygame.QUIT))
 
@@ -70,7 +102,7 @@ class GameEngine:
         self._spawn_timer += 1
         if self._spawn_timer >= self.pipe_interval:
             self._spawn_timer = 0
-            self.pipes.append(Pipe(self.width, self.height, speed=self.pipe_speed))
+            self.pipes.append(self._new_pipe(self.width))
 
         for pipe in self.pipes:
             pipe.move()
@@ -98,10 +130,16 @@ class GameEngine:
         overlay.fill((0, 0, 0, 160))
         screen.blit(overlay, (0, 0))
 
-        self._draw_centered(screen, self.big_font, "GAME OVER", self.height // 2 - 80)
-        self._draw_centered(screen, self.font, f"Final Score: {self.score}", self.height // 2)
+        cy = self.height // 2
+        self._draw_centered(screen, self.big_font, "GAME OVER", cy - 140)
+        self._draw_centered(screen, self.font, f"Final Score: {self.score}", cy - 70)
+
         if self.game_over_timer >= INPUT_DELAY_FRAMES:
-            self._draw_centered(screen, self.font, "Press any key to exit", self.height // 2 + 80)
+            self._draw_centered(screen, self.font, "Play again? Choose difficulty:", cy, YELLOW)
+            self._draw_centered(screen, self.font, "1 - Easy", cy + 50)
+            self._draw_centered(screen, self.font, "2 - Medium", cy + 90)
+            self._draw_centered(screen, self.font, "3 - Hard", cy + 130)
+            self._draw_centered(screen, self.font, "Q / Esc - Exit", cy + 190)
 
     def render(self, screen):
         for pipe in self.pipes:
@@ -112,6 +150,9 @@ class GameEngine:
 
         score_text = self.font.render(f"Score: {self.score}", True, WHITE)
         screen.blit(score_text, (10, 10))
+
+        mode_text = self.font.render(self.difficulty, True, WHITE)
+        screen.blit(mode_text, (self.width - mode_text.get_width() - 10, 10))
 
         if self.game_over:
             self._render_game_over(screen)
